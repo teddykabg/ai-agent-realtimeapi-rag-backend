@@ -28,8 +28,10 @@ if not api_key:
     )
 
 # Configure logging
+# Set to DEBUG to see detailed RAG event logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -39,7 +41,6 @@ openai_client = AsyncOpenAI(api_key=api_key)
 # Get system instructions from environment variable (optional)
 system_instructions = os.getenv("REALTIME_SYSTEM_INSTRUCTIONS", "")
 enable_rag = os.getenv("ENABLE_RAG", "false").lower() == "true"
-
 # Initialize Realtime WebSocket handler
 realtime_handler = RealtimeWebSocketHandler(openai_client, system_instructions=system_instructions, enable_rag=enable_rag)
 
@@ -68,27 +69,6 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
-
-@app.post("/realtime/client_secrets")
-async def generate_client_secret():
-    """
-    Generate an ephemeral client token for direct client connections to Realtime API.
-    This allows clients to connect directly using WebRTC without going through the relay.
-    
-    Returns:
-        JSON with "value" field containing the ephemeral key (starts with "ek_")
-    """
-    try:
-        response = await openai_client.realtime.client_secrets.create(
-            session={
-                "type": "realtime",
-                "model": "gpt-realtime"
-            }
-        )
-        return {"value": response.value}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating client secret: {str(e)}")
-
 
 @app.websocket("/ws/realtime")
 async def websocket_realtime(websocket: WebSocket):

@@ -102,31 +102,43 @@ async def search_documents(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
     try:
         from services.embeddings import generate_embeddings
         
+        logger.info(f"Searching documents for query: '{query[:100]}{'...' if len(query) > 100 else ''}' (top_k={top_k})")
         await ensure_collection()
         
         # Generate embedding for query
+        logger.debug("Generating query embedding...")
         query_embedding = await generate_embeddings([query])
         query_vector = query_embedding[0]
+        logger.debug(f"Query embedding generated (dimension: {len(query_vector)})")
         
         # Search in Qdrant
+        logger.info(f"Searching in Qdrant collection '{COLLECTION_NAME}'...")
         results = await client.search(
             collection_name=COLLECTION_NAME,
             query_vector=query_vector,
             limit=top_k
         )
+        logger.info(f"Found {len(results)} results from Qdrant")
         
         # Format results
         formatted_results = []
-        for result in results:
+        for i, result in enumerate(results):
             formatted_results.append({
                 "id": str(result.id),
                 "chunk": result.payload.get("chunk", ""),
                 "score": float(result.score),
                 "metadata": {k: v for k, v in result.payload.items() if k != "chunk"}
             })
+            logger.debug(f"Result {i+1}: score={result.score:.4f}, chunk_length={len(result.payload.get('chunk', ''))}")
+        
+        if formatted_results:
+            logger.info(f"Search completed: {len(formatted_results)} results returned (top score: {formatted_results[0]['score']:.4f})")
+        else:
+            logger.warning("No search results found")
         
         return formatted_results
     
     except Exception as e:
+        logger.error(f"Error searching documents: {str(e)}", exc_info=True)
         raise Exception(f"Error searching documents: {str(e)}")
 

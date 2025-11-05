@@ -451,7 +451,19 @@
         }
 
         function handleRealtimeEvent(event) {
-            console.log('Received event:', event.type);
+            console.log('Received event:', event.type, event);
+            
+            // Debug: Log all transcript-related events
+            if (event.type && (event.type.includes('transcript') || event.type.includes('transcription'))) {
+                console.log('[DEBUG] Transcript event details:', {
+                    type: event.type,
+                    delta: event.delta,
+                    transcript: event.transcript,
+                    text: event.text,
+                    item_id: event.item_id,
+                    fullEvent: event
+                });
+            }
 
             // Handle session events
             if (event.type === 'session.created' || event.type === 'session.updated') {
@@ -488,10 +500,34 @@
                 }
             }
 
-            if (event.type === 'conversation.item.input_audio_transcript.completed') {
-                const transcript = event.transcript;
+            // Handle user transcript delta events (real-time as user speaks)
+            // Check for both event type variants: transcript and transcription
+            if (event.type === 'conversation.item.input_audio_transcript.delta' || 
+                event.type === 'conversation.item.input_audio_transcription.delta') {
+                console.log('[TRANSCRIPT] User transcript delta:', event.delta);
+                if (event.delta) {
+                    appendTranscript('user', event.delta);
+                } else {
+                    console.warn('[TRANSCRIPT] Delta event received but no delta field:', event);
+                }
+            }
+
+            // Handle completed transcript events (both variants)
+            if (event.type === 'conversation.item.input_audio_transcript.completed' ||
+                event.type === 'conversation.item.input_audio_transcription.completed') {
+                const transcript = event.transcript || event.text;
+                console.log('[TRANSCRIPT] User transcript completed:', transcript);
                 if (transcript) {
-                    addMessage('user', `You said: ${transcript}`);
+                    // Only add completed message if we haven't already shown it via delta events
+                    // This prevents duplicate messages
+                    const transcriptEl = document.getElementById('transcript');
+                    const lastMessage = transcriptEl.lastElementChild;
+                    if (!lastMessage || !lastMessage.classList.contains('user') || 
+                        lastMessage.textContent.trim() !== transcript.trim()) {
+                        addMessage('user', transcript);
+                    }
+                } else {
+                    console.warn('[TRANSCRIPT] Completed event received but no transcript field:', event);
                 }
             }
 
