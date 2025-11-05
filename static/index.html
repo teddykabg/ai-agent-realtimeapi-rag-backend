@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent with RAG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-align: center;
+        }
+
+        .file-input-label:hover {
+            background: #5568d3;
+        }
+
+        .upload-btn {
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .voice-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .connection-status {
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .connection-status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .voice-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .record-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .record-btn.recording {
+            background: #dc3545;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-btn:not(.recording) {
+            background: #28a745;
+            color: white;
+        }
+
+        .record-btn:hover:not(:disabled) {
+            transform: scale(1.1);
+        }
+
+        .record-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .transcript {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .message.user {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        .message.assistant {
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+        }
+
+        .message-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #667eea;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Voice Agent with RAG</h1>
+            <p>Upload documents and chat with voice</p>
+        </div>
+
+        <div class="content">
+            <!-- Upload Panel -->
+            <div class="panel">
+                <h2>📄 Upload Documents</h2>
+                <div class="upload-section">
+                    <form id="uploadForm" class="upload-form">
+                        <div class="file-input-wrapper">
+                            <input type="file" id="fileInput" accept=".txt,.pdf,.md,.doc,.docx" multiple>
+                            <label for="fileInput" class="file-input-label">
+                                📁 Choose Files
+                            </label>
+                        </div>
+                        <div id="fileList"></div>
+                        <button type="submit" class="upload-btn" id="uploadBtn">
+                            ⬆️ Upload & Process
+                        </button>
+                        <div id="uploadStatus"></div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Voice Panel -->
+            <div class="panel">
+                <h2>🎤 Voice Chat</h2>
+                <div class="voice-section">
+                    <div id="connectionStatus" class="connection-status disconnected">
+                        Disconnected
+                    </div>
+                    
+                    <div class="voice-controls">
+                        <button id="recordBtn" class="record-btn" disabled>
+                            🎤
+                        </button>
+                    </div>
+
+                    <div class="transcript" id="transcript">
+                        <div class="message info">
+                            <div class="message-label">Info:</div>
+                            <div>Connect to start chatting with voice</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/realtime`;
+
+        let ws = null;
+        let isRecording = false;
+        let mediaRecorder = null;
+        let inputAudioContext = null;  // For microphone input
+        let audioChunks = [];
+        let sessionId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupFileUpload();
+            setupVoiceChat();
+            connectWebSocket();
+        });
+
+        // File Upload
+        function setupFileUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const fileList = document.getElementById('fileList');
+            const uploadForm = document.getElementById('uploadForm');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const uploadStatus = document.getElementById('uploadStatus');
+
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+
+                fileList.innerHTML = `<div class="status info">Selected ${files.length} file(s)</div>`;
+            });
+
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const files = fileInput.files;
+                if (files.length === 0) {
+                    showStatus(uploadStatus, 'Please select files to upload', 'error');
+                    return;
+                }
+
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = '⏳ Uploading...';
+
+                const formData = new FormData();
+                for (let file of files) {
+                    formData.append('file', file);
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    if (response.ok) {
+                        showStatus(uploadStatus, 
+                            `✅ Success! Processed ${result.chunks_processed} chunks`, 
+                            'success'
+                        );
+                        fileInput.value = '';
+                        fileList.innerHTML = '';
+                    } else {
+                        showStatus(uploadStatus, `❌ Error: ${result.detail || 'Upload failed'}`, 'error');
+                    }
+                } catch (error) {
+                    showStatus(uploadStatus, `❌ Error: ${error.message}`, 'error');
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = '⬆️ Upload & Process';
+                }
+            });
+        }
+
+        function showStatus(element, message, type) {
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+
+        // Voice Chat
+        function setupVoiceChat() {
+            const recordBtn = document.getElementById('recordBtn');
+
+            recordBtn.addEventListener('click', async () => {
+                if (!isRecording) {
+                    await startRecording();
+                } else {
+                    stopRecording();
+                }
+            });
+        }
+
+        async function connectWebSocket() {
+            const statusEl = document.getElementById('connectionStatus');
+            const recordBtn = document.getElementById('recordBtn');
+
+            statusEl.textContent = 'Connecting...';
+            statusEl.className = 'connection-status connecting';
+
+            try {
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    statusEl.textContent = '✅ Connected';
+                    statusEl.className = 'connection-status connected';
+                    recordBtn.disabled = false;
+                    addMessage('system', 'Connected to Realtime API');
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleRealtimeEvent(data);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    statusEl.textContent = '❌ Connection Error';
+                    statusEl.className = 'connection-status disconnected';
+                };
+
+                ws.onclose = () => {
+                    statusEl.textContent = 'Disconnected';
+                    statusEl.className = 'connection-status disconnected';
+                    recordBtn.disabled = true;
+                    addMessage('system', 'Disconnected from server');
+                    
+                    // Reconnect after 3 seconds
+                    setTimeout(connectWebSocket, 3000);
+                };
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                statusEl.textContent = '❌ Failed to Connect';
+                statusEl.className = 'connection-status disconnected';
+            }
+        }
+
+        function handleRealtimeEvent(event) {
+            console.log('Received event:', event.type);
+
+            // Handle session events
+            if (event.type === 'session.created' || event.type === 'session.updated') {
+                sessionId = event.session?.id;
+                addMessage('system', `Session ${sessionId ? 'created' : 'updated'}`);
+            }
+
+            // Handle audio output - use correct event type
+            if (event.type === 'response.output_audio.delta') {
+                // Check if this is a new audio item (like push-to-talk app)
+                if (event.item_id && event.item_id !== lastAudioItemId) {
+                    console.log(`New audio item started: ${event.item_id}`);
+                    resetAudioQueue();
+                    lastAudioItemId = event.item_id;
+                }
+                
+                // Decode and play audio
+                if (event.delta) {
+                    playAudioChunk(event.delta);
+                }
+            }
+
+            // Handle transcripts - check multiple event types
+            if (event.type === 'response.output_audio_transcript.delta') {
+                if (event.delta) {
+                    appendTranscript('assistant', event.delta);
+                }
+            }
+
+            // Also handle text output events (in case audio mode sends text)
+            if (event.type === 'response.output_text.delta') {
+                if (event.delta) {
+                    appendTranscript('assistant', event.delta);
+                }
+            }
+
+            if (event.type === 'conversation.item.input_audio_transcript.completed') {
+                const transcript = event.transcript;
+                if (transcript) {
+                    addMessage('user', `You said: ${transcript}`);
+                }
+            }
+
+            // Handle errors
+            if (event.type === 'error') {
+                console.error('Realtime API error:', event.message);
+                addMessage('system', `Error: ${event.message || 'Unknown error'}`);
+            }
+        }
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        sampleRate: 24000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                
+                inputAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 24000
+                });
+
+                const source = inputAudioContext.createMediaStreamSource(stream);
+                const processor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+
+                audioChunks = [];
+                isRecording = true;
+                document.getElementById('recordBtn').classList.add('recording');
+                document.getElementById('recordBtn').textContent = '⏹️';
+
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const pcm16 = new Int16Array(inputData.length);
+                    
+                    for (let i = 0; i < inputData.length; i++) {
+                        pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                    }
+
+                    // Convert to base64
+                    const bytes = new Uint8Array(pcm16.buffer);
+                    let binary = '';
+                    for (let i = 0; i < bytes.length; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    const base64Audio = btoa(binary);
+
+                    // Send audio chunk to OpenAI
+                    ws.send(JSON.stringify({
+                        type: 'input_audio_buffer.append',
+                        audio: base64Audio
+                    }));
+                };
+
+                source.connect(processor);
+                processor.connect(inputAudioContext.destination);
+
+                window.audioStream = stream;
+                window.audioProcessor = processor;
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                alert('Error accessing microphone. Please check permissions.');
+                isRecording = false;
+                document.getElementById('recordBtn').classList.remove('recording');
+                document.getElementById('recordBtn').textContent = '🎤';
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            document.getElementById('recordBtn').classList.remove('recording');
+            document.getElementById('recordBtn').textContent = '🎤';
+
+            if (window.audioProcessor) {
+                window.audioProcessor.disconnect();
+            }
+            if (window.audioStream) {
+                window.audioStream.getTracks().forEach(track => track.stop());
+            }
+
+            // With server_vad, we only need to commit - response is created automatically
+            // But we can optionally create it with explicit audio output
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'input_audio_buffer.commit'
+                }));
+                // Note: With server_vad, response is created automatically after commit
+                // But we can explicitly request audio output
+                ws.send(JSON.stringify({
+                    type: 'response.create',
+                    response: {
+                        modalities: ["audio", "text"]
+                    }
+                }));
+            }
+        }
+
+        // Audio playback queue - similar to AudioPlayerAsync from audio_util.py
+        let audioQueue = [];
+        let isPlaying = false;
+        let outputAudioContext = null;  // For audio output/playback
+        let lastAudioItemId = null;  // Track audio item IDs for queue management
+        const SAMPLE_RATE = 24000;
+
+        // Initialize audio context for playback
+        function initAudioContext() {
+            if (!outputAudioContext || outputAudioContext.state === 'closed') {
+                outputAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: SAMPLE_RATE
+                });
+            }
+            // Resume if suspended (browser autoplay policy)
+            if (outputAudioContext.state === 'suspended') {
+                outputAudioContext.resume();
+            }
+            return outputAudioContext;
+        }
+
+        function playAudioChunk(audioData) {
+            try {
+                // Decode base64 to binary
+                const binaryString = atob(audioData);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // Convert Int16 PCM to Float32 (same as audio_util.py approach)
+                const pcm16 = new Int16Array(bytes.buffer);
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / 32768.0;
+                }
+
+                // Add to queue
+                audioQueue.push(float32);
+                console.log(`Audio chunk added: ${float32.length} samples (${(float32.length/SAMPLE_RATE*1000).toFixed(1)}ms), queue size: ${audioQueue.length}`);
+
+                // Start playback if not already playing
+                if (!isPlaying) {
+                    playAudioQueue();
+                }
+            } catch (error) {
+                console.error('Error processing audio chunk:', error);
+            }
+        }
+
+        async function playAudioQueue() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+
+            isPlaying = true;
+            const ctx = initAudioContext();
+
+            try {
+                while (audioQueue.length > 0) {
+                    const chunk = audioQueue.shift();
+                    if (!chunk || chunk.length === 0) continue;
+
+                    // Create audio buffer
+                    const buffer = ctx.createBuffer(1, chunk.length, SAMPLE_RATE);
+                    buffer.getChannelData(0).set(chunk);
+                    
+                    // Create and play source
+                    const source = ctx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(ctx.destination);
+                    
+                    // Play chunk
+                    await new Promise((resolve, reject) => {
+                        source.onended = resolve;
+                        source.onerror = reject;
+                        try {
+                            source.start(0);
+                        } catch (e) {
+                            // May fail if already started
+                            resolve();
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error playing audio queue:', error);
+            } finally {
+                isPlaying = false;
+            }
+        }
+
+        // Reset audio queue for new audio item (like reset_frame_count in audio_util.py)
+        function resetAudioQueue() {
+            audioQueue = [];
+            console.log('Audio queue reset');
+        }
+
+        function addMessage(role, text) {
+            const transcript = document.getElementById('transcript');
+            const message = document.createElement('div');
+            message.className = `message ${role}`;
+            message.innerHTML = `
+                <div class="message-label">${role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'System'}:</div>
+                <div>${text}</div>
+            `;
+            transcript.appendChild(message);
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+
+        function appendTranscript(role, delta) {
+            const transcript = document.getElementById('transcript');
+            let lastMessage = transcript.lastElementChild;
+            
+            if (!lastMessage || !lastMessage.classList.contains('message') || 
+                !lastMessage.classList.contains(role)) {
+                lastMessage = document.createElement('div');
+                lastMessage.className = `message ${role}`;
+                lastMessage.innerHTML = `
+                    <div class="message-label">${role === 'assistant' ? 'Assistant' : 'You'}:</div>
+                    <div></div>
+                `;
+                transcript.appendChild(lastMessage);
+            }
+
+            const contentDiv = lastMessage.querySelector('div:last-child');
+            contentDiv.textContent += delta;
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+    </script>
+</body>
+</html>
+
