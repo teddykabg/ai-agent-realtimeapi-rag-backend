@@ -2,12 +2,23 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 import os
 import uuid
+import logging
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Initialize Qdrant client
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "documents")
+
+# Log Qdrant configuration (mask API key for security)
+api_key_preview = f"{QDRANT_API_KEY[:8]}..." if QDRANT_API_KEY and len(QDRANT_API_KEY) > 8 else ("SET" if QDRANT_API_KEY else "NOT SET")
+logger.info(f"Qdrant Configuration - URL: {QDRANT_URL}, API Key: {api_key_preview}, Collection: {COLLECTION_NAME}")
 
 client = AsyncQdrantClient(
     url=QDRANT_URL,
@@ -19,10 +30,13 @@ async def ensure_collection():
     Ensure the collection exists, create if it doesn't.
     """
     try:
+        logger.info(f"Connecting to Qdrant at {QDRANT_URL} to ensure collection '{COLLECTION_NAME}' exists...")
         collections = await client.get_collections()
         collection_names = [col.name for col in collections.collections]
+        logger.info(f"Existing collections: {collection_names}")
         
         if COLLECTION_NAME not in collection_names:
+            logger.info(f"Collection '{COLLECTION_NAME}' not found, creating it...")
             await client.create_collection(
                 collection_name=COLLECTION_NAME,
                 vectors_config=VectorParams(
@@ -30,7 +44,11 @@ async def ensure_collection():
                     distance=Distance.COSINE
                 )
             )
+            logger.info(f"Collection '{COLLECTION_NAME}' created successfully")
+        else:
+            logger.info(f"Collection '{COLLECTION_NAME}' already exists")
     except Exception as e:
+        logger.error(f"Failed to ensure collection '{COLLECTION_NAME}' at {QDRANT_URL}: {str(e)}")
         raise Exception(f"Error ensuring collection: {str(e)}")
 
 async def store_documents(chunks: List[str], embeddings: List[List[float]], metadata: Dict[str, Any] = None) -> List[str]:
@@ -38,6 +56,7 @@ async def store_documents(chunks: List[str], embeddings: List[List[float]], meta
     Store documents (chunks) with their embeddings in Qdrant.
     """
     try:
+        logger.info(f"Preparing to store {len(chunks)} documents in collection '{COLLECTION_NAME}'...")
         await ensure_collection()
         
         points = []
@@ -61,15 +80,19 @@ async def store_documents(chunks: List[str], embeddings: List[List[float]], meta
                 )
             )
         
-        # Batch upload points
-        await client.upsert(
-            collection_name=COLLECTION_NAME,
-            points=points
-        )
+        logger.info(f"Upserting {len(points)} points to Qdrant collection '{COLLECTION_NAME}' in batches...")
+        # Batch upload points in chunks of 50 to avoid timeout
+        batch_size = 50
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i + batch_size]
+            await client.upsert(collection_name=COLLECTION_NAME, points=batch)
+            logger.info(f"Uploaded batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1} ({len(batch)} points)")
+        logger.info(f"Successfully stored {len(document_ids)} documents in Qdrant")
         
         return document_ids
     
     except Exception as e:
+        logger.error(f"Error storing documents in Qdrant: {str(e)}", exc_info=True)
         raise Exception(f"Error storing documents: {str(e)}")
 
 async def search_documents(query: str, top_k: int = 10) -> List[Dict[str, Any]]:

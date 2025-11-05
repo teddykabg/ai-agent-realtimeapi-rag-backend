@@ -2,10 +2,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-# RAG-related imports - commented out for now
-# from services.vectorstore import search_documents
-# from services.reranker import rerank_documents
+# RAG-related imports
+from services.vectorstore import search_documents
+from services.reranker import rerank_documents
 from services.realtime_websocket import RealtimeWebSocketHandler
+from routes import upload
 
 from openai import AsyncOpenAI
 import uvicorn
@@ -35,8 +36,12 @@ logging.basicConfig(
 # Initialize OpenAI client for ephemeral token generation
 openai_client = AsyncOpenAI(api_key=api_key)
 
+# Get system instructions from environment variable (optional)
+system_instructions = os.getenv("REALTIME_SYSTEM_INSTRUCTIONS", "")
+enable_rag = os.getenv("ENABLE_RAG", "false").lower() == "true"
+
 # Initialize Realtime WebSocket handler
-realtime_handler = RealtimeWebSocketHandler(openai_client)
+realtime_handler = RealtimeWebSocketHandler(openai_client, system_instructions=system_instructions, enable_rag=enable_rag)
 
 app = FastAPI(title="RAG + OpenAI Realtime API Backend", version="1.0.0")
 
@@ -51,6 +56,9 @@ app.add_middleware(
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Include routers
+app.include_router(upload.router, prefix="/upload", tags=["upload"])
 
 @app.get("/")
 async def root():

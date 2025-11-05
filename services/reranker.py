@@ -1,9 +1,18 @@
 import cohere
 import os
-from typing import List
+from typing import List, Optional
 
-# Initialize Cohere client
-cohere_client = cohere.AsyncClient(api_key=os.getenv("COHERE_API_KEY"))
+# Lazy initialization - client created only when needed
+_cohere_client: Optional[cohere.AsyncClient] = None
+
+def _get_cohere_client() -> Optional[cohere.AsyncClient]:
+    """Get or create Cohere client (lazy initialization)."""
+    global _cohere_client
+    if _cohere_client is None:
+        api_key = os.getenv("COHERE_API_KEY")
+        if api_key:
+            _cohere_client = cohere.AsyncClient(api_key=api_key)
+    return _cohere_client
 
 async def rerank_documents(query: str, documents: List[str], top_k: int = 5) -> List[str]:
     """
@@ -13,7 +22,12 @@ async def rerank_documents(query: str, documents: List[str], top_k: int = 5) -> 
         if not documents:
             return []
         
-        response = await cohere_client.rerank(
+        client = _get_cohere_client()
+        if not client:
+            # No API key, return original documents
+            return documents[:top_k]
+        
+        response = await client.rerank(
             model="rerank-english-v3.0",
             query=query,
             documents=documents,
