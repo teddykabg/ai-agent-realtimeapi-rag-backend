@@ -22,6 +22,10 @@ class RealtimeWebSocketHandler:
         self.active_connections: Dict[str, Any] = {}
         self.system_instructions = system_instructions or os.getenv("REALTIME_SYSTEM_INSTRUCTIONS", "")
         self.enable_rag = enable_rag or os.getenv("ENABLE_RAG", "false").lower() == "true"
+        # Track processed item_ids per client to prevent duplicate RAG injections
+        self.processed_items: Dict[str, set] = {}
+        # Track processed queries to prevent double injection from audio + text paths
+        self.processed_queries: Dict[str, set] = {}
         if self.enable_rag:
             logger.info("RAG is ENABLED - will inject context from knowledge base")
         else:
@@ -105,6 +109,11 @@ class RealtimeWebSocketHandler:
             except:
                 pass
         finally:
+            # Clean up tracking data for this client
+            if client_id in self.processed_items:
+                del self.processed_items[client_id]
+            if client_id in self.processed_queries:
+                del self.processed_queries[client_id]
             logger.info(f"Connection closed for client {client_id}")
     
     async def _forward_realtime_events(self, conn: AsyncRealtimeConnection, websocket: WebSocket, client_id: str):
@@ -135,31 +144,41 @@ class RealtimeWebSocketHandler:
                     logger.error(f"[ERROR]   - All attributes: {list(error_attrs.keys())}")
                     logger.error(f"[ERROR]   - Full error data: {error_attrs}")
                 
-                # RAG: Intercept user transcript completion and inject context
+                # RAG: Intercept user transcript completion and inject context BEFORE forwarding
                 if self.enable_rag:
                     logger.debug(f"[RAG] Checking RAG trigger for event type: '{event_type}'")
                     
-                    # Check for audio transcript completion (both variants)
-                    if event_type == "conversation.item.input_audio_transcript.completed" or \
-                       event_type == "conversation.item.input_audio_transcription.completed":
-                        logger.info(f"[RAG] Matched audio transcript event type for client {client_id}")
+                    # Check for audio transcript completion (correct event type only)
+                    if event_type == "conversation.item.input_audio_transcription.completed":
+                        item_id = getattr(event, 'item_id', None)
                         transcript = getattr(event, 'transcript', None) or getattr(event, 'text', None)
-                        logger.debug(f"[RAG] Transcript attribute value: {transcript is not None} (type: {type(transcript)})")
-                        if transcript:
+                        
+                        # Check if we've already processed this item_id
+                        if client_id not in self.processed_items:
+                            self.processed_items[client_id] = set()
+                        
+                        if item_id and item_id in self.processed_items[client_id]:
+                            logger.debug(f"[RAG] Item {item_id} already processed, skipping RAG injection")
+                        elif transcript:
                             logger.info(f"[RAG] Audio transcript completed for client {client_id}: '{transcript[:100]}{'...' if len(transcript) > 100 else ''}'")
-                            await self._inject_rag_context(conn, transcript, client_id)
+                            
+                            # Mark query as processed to prevent double injection
+                            query_key = f"{client_id}:{transcript.lower().strip()}"
+                            if client_id not in self.processed_queries:
+                                self.processed_queries[client_id] = set()
+                            
+                            if query_key not in self.processed_queries[client_id]:
+                                # Inject RAG context BEFORE forwarding the event
+                                await self._inject_rag_context(conn, transcript, client_id, item_id)
+                                self.processed_queries[client_id].add(query_key)
+                            else:
+                                logger.debug(f"[RAG] Query already processed, skipping duplicate injection")
+                            
+                            # Mark item_id as processed
+                            if item_id:
+                                self.processed_items[client_id].add(item_id)
                         else:
                             logger.warning(f"[RAG] Audio transcript event received but transcript is None or empty")
-                    else:
-                        # Log if this was a transcript-related event but with different type
-                        if "transcript" in event_type.lower() or "input_audio" in event_type.lower():
-                            logger.info(f"[RAG] Received transcript-related event but type mismatch: '{event_type}' (expected: 'conversation.item.input_audio_transcript.completed')")
-                            # Try to get transcript anyway to see what's available
-                            transcript = getattr(event, 'transcript', None)
-                            logger.debug(f"[RAG] Available attributes: {[attr for attr in dir(event) if not attr.startswith('_')]}")
-                            if transcript:
-                                logger.info(f"[RAG] Found transcript in alternate event type: '{transcript[:100]}{'...' if len(transcript) > 100 else ''}'")
-                                await self._inject_rag_context(conn, transcript, client_id)
                 
                 # Convert event to JSON-serializable format
                 event_data = self._event_to_dict(event)
@@ -177,8 +196,8 @@ class RealtimeWebSocketHandler:
         except Exception as e:
             logger.error(f"Error forwarding events for client {client_id}: {e}", exc_info=True)
     
-    async def _inject_rag_context(self, conn: AsyncRealtimeConnection, query: str, client_id: str):
-        """Retrieve relevant documents and inject as context."""
+    async def _inject_rag_context(self, conn: AsyncRealtimeConnection, query: str, client_id: str, item_id: Optional[str] = None):
+        """Retrieve relevant documents and inject as context. Injects BEFORE original message is processed."""
         try:
             logger.info(f"[RAG] Starting context retrieval for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
             from services.vectorstore import search_documents
@@ -188,12 +207,28 @@ class RealtimeWebSocketHandler:
             results = await search_documents(query, top_k=5)
             if not results:
                 logger.warning(f"[RAG] No documents found in knowledge base for query")
+                # Send a system message that RAG found no results
+                try:
+                    await conn.send({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "system",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": "[Note: No relevant context found in knowledge base for this query]"
+                                }
+                            ]
+                        }
+                    })
+                except Exception as notify_error:
+                    logger.error(f"[RAG] Failed to send no-results notification: {notify_error}")
                 return
             
             logger.info(f"[RAG] Found {len(results)} relevant documents (top score: {results[0]['score']:.4f})")
             
             chunks = [r['chunk'] for r in results]
-            original_chunk_count = len(chunks)
             
             # Rerank if Cohere API key is available
             if os.getenv("COHERE_API_KEY"):
@@ -203,24 +238,55 @@ class RealtimeWebSocketHandler:
             else:
                 logger.info(f"[RAG] Cohere API key not set - using top {min(3, len(chunks))} documents without reranking")
             
-            # Use top 3 chunks for context
+            # Use top 3 chunks for context, with length management
             context_chunks = chunks[:3]
             context = "\n\n".join(context_chunks)
+            
+            # Limit context length to prevent token limit issues (rough estimate: 1 token ≈ 4 chars)
+            max_context_chars = 4000  # ~1000 tokens for context
+            if len(context) > max_context_chars:
+                logger.warning(f"[RAG] Context too long ({len(context)} chars), truncating to {max_context_chars} chars")
+                context = context[:max_context_chars] + "... [truncated]"
+            
             context_length = len(context)
             
             logger.info(f"[RAG] Injecting context ({len(context_chunks)} chunks, {context_length} chars) into conversation for client {client_id}")
             
+            # Inject RAG context as a system message
+            # The original user transcript is already in the conversation as a user message
             await conn.send({
                 "type": "conversation.item.create",
                 "item": {
                     "type": "message",
-                    "role": "user",
-                    "content": f"Context from knowledge base:\n{context}\n\nUser question: {query}"
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": f"Relevant context from the knowledge base:\n\n{context}"
+                        }
+                    ]
                 }
             })
-            logger.info(f"[RAG] Successfully injected RAG context for client {client_id}")
+            logger.info(f"[RAG] Successfully injected RAG context for client {client_id} (item_id: {item_id})")
         except Exception as e:
             logger.error(f"[RAG] RAG injection failed for client {client_id}: {e}", exc_info=True)
+            # Send error notification as system message
+            try:
+                await conn.send({
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "system",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "[RAG Error: Could not retrieve context from knowledge base. Proceeding without enhanced context.]"
+                            }
+                        ]
+                    }
+                })
+            except Exception as notify_error:
+                logger.error(f"[RAG] Failed to send error notification: {notify_error}")
     
     async def _forward_client_messages(self, conn: AsyncRealtimeConnection, websocket: WebSocket, client_id: str):
         """Forward messages from WebSocket client to OpenAI Realtime API."""
@@ -231,7 +297,7 @@ class RealtimeWebSocketHandler:
                     message = json.loads(data)
                     logger.debug(f"Received from client {client_id}: {message.get('type')}")
                     
-                    # RAG: Inject context for text messages before forwarding
+                    # RAG: Inject context for text messages (only if not already processed via audio transcript)
                     if self.enable_rag:
                         message_type = message.get("type")
                         logger.debug(f"[RAG] Checking text message trigger for message type: '{message_type}'")
@@ -247,8 +313,19 @@ class RealtimeWebSocketHandler:
                                 content = item.get("content")
                                 logger.debug(f"[RAG] Content type: {type(content)}, is string: {isinstance(content, str)}")
                                 if isinstance(content, str):
-                                    logger.info(f"[RAG] Text message received for client {client_id}: '{content[:100]}{'...' if len(content) > 100 else ''}'")
-                                    await self._inject_rag_context(conn, content, client_id)
+                                    # Check if this query was already processed (e.g., via audio transcript)
+                                    query_key = f"{client_id}:{content.lower().strip()}"
+                                    if client_id not in self.processed_queries:
+                                        self.processed_queries[client_id] = set()
+                                    
+                                    if query_key not in self.processed_queries[client_id]:
+                                        logger.info(f"[RAG] Text message received for client {client_id}: '{content[:100]}{'...' if len(content) > 100 else ''}'")
+                                        # Get item_id if available from the message
+                                        item_id = message.get("item_id") or item.get("id")
+                                        await self._inject_rag_context(conn, content, client_id, item_id)
+                                        self.processed_queries[client_id].add(query_key)
+                                    else:
+                                        logger.debug(f"[RAG] Text message query already processed (likely via audio transcript), skipping RAG injection")
                                 else:
                                     logger.warning(f"[RAG] Content is not a string: {type(content)}")
                             else:
