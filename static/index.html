@@ -320,6 +320,7 @@
         let inputAudioContext = null;  // For microphone input
         let audioChunks = [];
         let sessionId = null;
+        let processedTranscriptItems = new Set();  // Track processed transcript item_ids to prevent duplicates
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -501,30 +502,43 @@
             }
 
             // Handle user transcript delta events (real-time as user speaks)
-            // Check for both event type variants: transcript and transcription
-            if (event.type === 'conversation.item.input_audio_transcript.delta' || 
-                event.type === 'conversation.item.input_audio_transcription.delta') {
+            if (event.type === 'conversation.item.input_audio_transcription.delta') {
                 console.log('[TRANSCRIPT] User transcript delta:', event.delta);
                 if (event.delta) {
                     appendTranscript('user', event.delta);
+                    // Mark that we're receiving delta events for this item
+                    if (event.item_id) {
+                        processedTranscriptItems.add(event.item_id);
+                    }
                 } else {
                     console.warn('[TRANSCRIPT] Delta event received but no delta field:', event);
                 }
             }
 
-            // Handle completed transcript events (both variants)
-            if (event.type === 'conversation.item.input_audio_transcript.completed' ||
-                event.type === 'conversation.item.input_audio_transcription.completed') {
+            // Handle completed transcript events
+            if (event.type === 'conversation.item.input_audio_transcription.completed') {
                 const transcript = event.transcript || event.text;
-                console.log('[TRANSCRIPT] User transcript completed:', transcript);
+                const itemId = event.item_id;
+                console.log('[TRANSCRIPT] User transcript completed:', transcript, 'item_id:', itemId);
+                
+                // Skip if we've already processed this item_id
+                if (itemId && processedTranscriptItems.has(itemId)) {
+                    console.log('[TRANSCRIPT] Skipping duplicate completed event for item_id:', itemId);
+                    return;
+                }
+                
                 if (transcript) {
                     // Only add completed message if we haven't already shown it via delta events
-                    // This prevents duplicate messages
                     const transcriptEl = document.getElementById('transcript');
                     const lastMessage = transcriptEl.lastElementChild;
+                    const lastContent = lastMessage?.querySelector('div:last-child')?.textContent.trim();
                     if (!lastMessage || !lastMessage.classList.contains('user') || 
-                        lastMessage.textContent.trim() !== transcript.trim()) {
+                        lastContent !== transcript.trim()) {
                         addMessage('user', transcript);
+                    }
+                    // Mark this item as processed
+                    if (itemId) {
+                        processedTranscriptItems.add(itemId);
                     }
                 } else {
                     console.warn('[TRANSCRIPT] Completed event received but no transcript field:', event);

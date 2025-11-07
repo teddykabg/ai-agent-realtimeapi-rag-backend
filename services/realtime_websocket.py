@@ -42,16 +42,27 @@ class RealtimeWebSocketHandler:
                 
                 # Update session configuration
                 session_config = {
-                    "audio": {
-                        "input": {"turn_detection": {"type": "server_vad"}},
-                        "input_audio_transcription": {
-                        "enabled": True,
-                        "model": "whisper-1"
-                        }
-                    },
-                    
+                    "type":"realtime",
                     "model": "gpt-realtime",
-                    "type": "realtime",
+                    "audio":{
+                        "input":{
+                            "turn_detection": {
+                                "type": "server_vad"
+                            },
+                            "transcription":{
+                                "model": "gpt-4o-mini-transcribe",
+                                "prompt":"",
+                                "language": "en"
+                            },
+                            "noise_reduction": {
+                                "type": "near_field",
+                            },
+                        },
+                        "output":{
+                            "speed": 0.9,
+                            "voice":"cedar"
+                        }
+                    },   
                 }
                 
                 # Add system instructions if provided
@@ -104,16 +115,25 @@ class RealtimeWebSocketHandler:
                 event_type = getattr(event, 'type', 'unknown')
                 logger.info(f"[EVENT] Received event type: '{event_type}' for client {client_id}")
                 
-                # Log transcript delta events for debugging
-                if "input_audio_transcription" in event_type.lower():
-                    delta = getattr(event, 'delta', None)
-                    transcript = getattr(event, 'transcript', None)
-                    if delta:
-                        logger.info(f"[TRANSCRIPT] Received transcript delta for client {client_id}: '{delta[:100]}{'...' if len(delta) > 100 else ''}'")
-                    elif transcript:
-                        logger.info(f"[TRANSCRIPT] Received transcript (completed) for client {client_id}: '{transcript[:100]}{'...' if len(transcript) > 100 else ''}'")
-                    else:
-                        logger.debug(f"[TRANSCRIPT] Received transcript event '{event_type}' but no delta/transcript found. Event attributes: {[attr for attr in dir(event) if not attr.startswith('_')]}")
+                # Detailed logging for error events
+                if event_type == "error":
+                    error_message = getattr(event, 'message', None)
+                    error_code = getattr(event, 'code', None)
+                    error_param = getattr(event, 'param', None)
+                    error_type = getattr(event, 'type', None)
+                    event_id = getattr(event, 'event_id', None)
+                    
+                    # Get all available error attributes
+                    error_attrs = {attr: getattr(event, attr, None) for attr in dir(event) if not attr.startswith('_') and not callable(getattr(event, attr, None))}
+                    
+                    logger.error(f"[ERROR] Error event received for client {client_id}:")
+                    logger.error(f"[ERROR]   - Message: {error_message}")
+                    logger.error(f"[ERROR]   - Code: {error_code}")
+                    logger.error(f"[ERROR]   - Param: {error_param}")
+                    logger.error(f"[ERROR]   - Type: {error_type}")
+                    logger.error(f"[ERROR]   - Event ID: {event_id}")
+                    logger.error(f"[ERROR]   - All attributes: {list(error_attrs.keys())}")
+                    logger.error(f"[ERROR]   - Full error data: {error_attrs}")
                 
                 # RAG: Intercept user transcript completion and inject context
                 if self.enable_rag:
