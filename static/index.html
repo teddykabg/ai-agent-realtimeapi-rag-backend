@@ -4,81 +4,167 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Agent with RAG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            /* Primary colors */
+            --color-accent: #2356FF;
+            
+            /* Secondary colors */
+            --color-secondary-100: #EBF4FF;
+            --color-secondary-200: #2DB2FF;
+            --color-secondary-300: #1D36B6;
+            
+            /* Neutral colors */
+            --color-neutral-100: #FFFFFF;
+            --color-neutral-200: #F1F4FF;
+            --color-neutral-300: #CBD2EA;
+            --color-neutral-400: #B3BAD3;
+            --color-neutral-500: #8791AD;
+            --color-neutral-600: #515B79;
+            --color-neutral-700: #00143F;
+            --color-neutral-800: #001035;
+            
+            /* Typography - Display sizes (font-size) */
+            --font-size-display-11: 56px;
+            --font-size-display-10: 48px;
+            --font-size-display-9: 40px;
+            --font-size-display-8: 36px;
+            --font-size-display-7: 32px;
+            --font-size-display-6: 28px;
+            --font-size-display-5: 24px;
+            --font-size-display-4: 20px;
+            --font-size-display-3: 18px;
+            --font-size-display-2: 16px;
+            --font-size-display-1: 14px;
+            
+            /* Typography - Display sizes (line-height) */
+            --line-height-display-11: 62px;
+            --line-height-display-10: 53px;
+            --line-height-display-9: 46px;
+            --line-height-display-8: 45px;
+            --line-height-display-7: 40px;
+            --line-height-display-6: 35px;
+            --line-height-display-5: 30px;
+            --line-height-display-4: 25px;
+            --line-height-display-3: 23px;
+            --line-height-display-2: 20px;
+            --line-height-display-1: 18px;
+            
+            /* Typography - Paragraph styles */
+            --font-size-paragraph-large: 14px;
+            --line-height-paragraph-large: 21px;
+            --font-size-paragraph-default: 16px;
+            --line-height-paragraph-default: 24px;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #FAFAFA;
             min-height: 100vh;
-            padding: 20px;
+            padding: 0;
+            color: var(--color-neutral-700);
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
+            background: var(--color-neutral-100);
+            min-height: 100vh;
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            background: var(--color-neutral-100);
+            border-bottom: 1px solid #E5E7EB;
+            color: var(--color-neutral-800);
+            padding: 32px 48px;
+            text-align: left;
         }
 
         .header h1 {
-            font-size: 2rem;
-            margin-bottom: 10px;
+            font-size: var(--font-size-display-6);
+            line-height: var(--line-height-display-6);
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--color-neutral-800);
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: var(--font-size-paragraph-default);
+            line-height: var(--line-height-paragraph-default);
+            color: var(--color-neutral-500);
+            font-weight: 400;
         }
 
         .content {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            padding: 30px;
+            gap: 24px;
+            padding: 48px;
         }
 
         @media (max-width: 768px) {
             .content {
                 grid-template-columns: 1fr;
+                padding: 24px;
+                gap: 24px;
+            }
+            
+            .header {
+                padding: 24px;
+            }
+            
+            .header h1 {
+                font-size: var(--font-size-display-7);
+                line-height: var(--line-height-display-7);
             }
         }
 
         .panel {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 25px;
-            border: 2px solid #e9ecef;
+            background: var(--color-neutral-100);
+            border-radius: 8px;
+            padding: 32px;
+            border: 1px solid #E5E7EB;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
         }
 
         .panel h2 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.5rem;
+            color: var(--color-neutral-800);
+            margin-bottom: 24px;
+            font-size: var(--font-size-display-4);
+            line-height: var(--line-height-display-4);
+            font-weight: 600;
+            letter-spacing: -0.01em;
         }
 
         .upload-section {
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
 
         .upload-form {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 16px;
         }
 
         .file-input-wrapper {
             position: relative;
             overflow: hidden;
             display: inline-block;
+            width: 100%;
         }
 
         .file-input-wrapper input[type=file] {
@@ -88,167 +174,232 @@
 
         .file-input-label {
             display: inline-block;
-            padding: 12px 24px;
-            background: #667eea;
-            color: white;
-            border-radius: 8px;
+            width: 100%;
+            padding: 10px 20px;
+            background: var(--color-neutral-100);
+            color: var(--color-neutral-700);
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 200ms ease;
             text-align: center;
+            font-size: var(--font-size-paragraph-default);
+            line-height: var(--line-height-paragraph-default);
+            font-weight: 500;
         }
 
         .file-input-label:hover {
-            background: #5568d3;
+            background: #F9FAFB;
+            border-color: var(--color-accent);
+            color: var(--color-accent);
+        }
+
+        .file-input-label:active {
+            background: #F3F4F6;
         }
 
         .upload-btn {
-            padding: 12px 24px;
-            background: #28a745;
-            color: white;
+            padding: 10px 20px;
+            background: var(--color-neutral-800);
+            color: var(--color-neutral-100);
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background 0.3s;
+            font-size: var(--font-size-paragraph-default);
+            line-height: var(--line-height-paragraph-default);
+            font-weight: 500;
+            transition: all 200ms ease;
+            font-family: 'Inter Tight', sans-serif;
         }
 
         .upload-btn:hover:not(:disabled) {
-            background: #218838;
+            background: var(--color-neutral-700);
+        }
+
+        .upload-btn:active:not(:disabled) {
+            background: var(--color-neutral-800);
         }
 
         .upload-btn:disabled {
-            background: #ccc;
+            background: #E5E7EB;
+            color: #9CA3AF;
             cursor: not-allowed;
         }
 
         .status {
-            padding: 10px;
-            border-radius: 8px;
-            margin-top: 10px;
-            font-size: 14px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: var(--font-size-paragraph-large);
+            line-height: var(--line-height-paragraph-large);
         }
 
         .status.success {
-            background: #d4edda;
-            color: #155724;
+            background: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
         }
 
         .status.error {
-            background: #f8d7da;
-            color: #721c24;
+            background: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
         }
 
         .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
+            background: #F0F9FF;
+            color: #0C4A6E;
+            border: 1px solid #BAE6FD;
         }
 
         .voice-section {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 24px;
         }
 
         .connection-status {
-            padding: 12px;
-            border-radius: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
             text-align: center;
-            font-weight: 600;
+            font-weight: 500;
+            font-size: var(--font-size-paragraph-large);
+            line-height: var(--line-height-paragraph-large);
+            border: 1px solid;
         }
 
         .connection-status.connected {
-            background: #d4edda;
-            color: #155724;
+            background: #ECFDF5;
+            color: #065F46;
+            border-color: #A7F3D0;
         }
 
         .connection-status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
+            background: #FEF2F2;
+            color: #991B1B;
+            border-color: #FECACA;
         }
 
         .connection-status.connecting {
-            background: #fff3cd;
-            color: #856404;
+            background: #F0F9FF;
+            color: #0C4A6E;
+            border-color: #BAE6FD;
         }
 
         .voice-controls {
             display: flex;
-            gap: 15px;
+            gap: 16px;
             justify-content: center;
             align-items: center;
         }
 
         .record-btn {
-            width: 80px;
-            height: 80px;
+            width: 64px;
+            height: 64px;
             border-radius: 50%;
-            border: none;
+            border: 1px solid #E5E7EB;
             cursor: pointer;
             font-size: 24px;
-            font-weight: bold;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            font-weight: 500;
+            transition: all 200ms ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-neutral-100);
         }
 
         .record-btn.recording {
-            background: #dc3545;
-            color: white;
+            background: #DC2626;
+            color: var(--color-neutral-100);
+            border-color: #DC2626;
             animation: pulse 1.5s infinite;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
         }
 
         .record-btn:not(.recording) {
-            background: #28a745;
-            color: white;
+            background: var(--color-neutral-800);
+            color: var(--color-neutral-100);
+            border-color: var(--color-neutral-800);
         }
 
         .record-btn:hover:not(:disabled) {
-            transform: scale(1.1);
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .record-btn:active:not(:disabled) {
+            transform: scale(0.98);
         }
 
         .record-btn:disabled {
-            background: #ccc;
+            background: #F3F4F6;
+            color: #9CA3AF;
+            border-color: #E5E7EB;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+            0%, 100% { 
+                transform: scale(1);
+                box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+            }
+            50% { 
+                transform: scale(1.05);
+                box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.15);
+            }
         }
 
         .transcript {
-            background: white;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
+            background: #FAFAFA;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
             padding: 20px;
             min-height: 300px;
             max-height: 400px;
             overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.6;
+            font-family: 'Inter Tight', sans-serif;
+            font-size: var(--font-size-paragraph-default);
+            line-height: var(--line-height-paragraph-default);
         }
 
         .message {
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 8px;
+            margin-bottom: 12px;
+            padding: 12px 16px;
+            border-radius: 6px;
         }
 
         .message.user {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
+            background: var(--color-neutral-100);
+            border-left: 2px solid var(--color-accent);
         }
 
         .message.assistant {
-            background: #f3e5f5;
-            border-left: 4px solid #9c27b0;
+            background: var(--color-neutral-100);
+            border-left: 2px solid #6B7280;
+        }
+
+        .message.system {
+            background: #F9FAFB;
+            border-left: 2px solid #9CA3AF;
         }
 
         .message-label {
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--color-neutral-800);
+            font-size: var(--font-size-display-1);
+            line-height: var(--line-height-display-1);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .message div:last-child {
+            color: var(--color-neutral-700);
+            font-size: var(--font-size-paragraph-default);
+            line-height: var(--line-height-paragraph-default);
         }
 
         .hidden {
@@ -259,25 +410,25 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎙️ Voice Agent with RAG</h1>
+            <h1>Voice Agent with RAG</h1>
             <p>Upload documents and chat with voice</p>
         </div>
 
         <div class="content">
             <!-- Upload Panel -->
             <div class="panel">
-                <h2>📄 Upload Documents</h2>
+                <h2>Upload Documents</h2>
                 <div class="upload-section">
                     <form id="uploadForm" class="upload-form">
                         <div class="file-input-wrapper">
                             <input type="file" id="fileInput" accept=".txt,.pdf,.md,.doc,.docx" multiple>
                             <label for="fileInput" class="file-input-label">
-                                📁 Choose Files
+                                Choose Files
                             </label>
                         </div>
                         <div id="fileList"></div>
                         <button type="submit" class="upload-btn" id="uploadBtn">
-                            ⬆️ Upload & Process
+                            Upload & Process
                         </button>
                         <div id="uploadStatus"></div>
                     </form>
@@ -286,7 +437,7 @@
 
             <!-- Voice Panel -->
             <div class="panel">
-                <h2>🎤 Voice Chat</h2>
+                <h2>Voice Chat</h2>
                 <div class="voice-section">
                     <div id="connectionStatus" class="connection-status disconnected">
                         Disconnected
@@ -294,7 +445,12 @@
                     
                     <div class="voice-controls">
                         <button id="recordBtn" class="record-btn" disabled>
-                            🎤
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
                         </button>
                     </div>
 
@@ -353,7 +509,7 @@
                 }
 
                 uploadBtn.disabled = true;
-                uploadBtn.textContent = '⏳ Uploading...';
+                uploadBtn.textContent = 'Uploading...';
 
                 const formData = new FormData();
                 for (let file of files) {
@@ -369,19 +525,19 @@
                     const result = await response.json();
                     if (response.ok) {
                         showStatus(uploadStatus, 
-                            `✅ Success! Processed ${result.chunks_processed} chunks`, 
+                            `Success! Processed ${result.chunks_processed} chunks`, 
                             'success'
                         );
                         fileInput.value = '';
                         fileList.innerHTML = '';
                     } else {
-                        showStatus(uploadStatus, `❌ Error: ${result.detail || 'Upload failed'}`, 'error');
+                        showStatus(uploadStatus, `Error: ${result.detail || 'Upload failed'}`, 'error');
                     }
                 } catch (error) {
-                    showStatus(uploadStatus, `❌ Error: ${error.message}`, 'error');
+                    showStatus(uploadStatus, `Error: ${error.message}`, 'error');
                 } finally {
                     uploadBtn.disabled = false;
-                    uploadBtn.textContent = '⬆️ Upload & Process';
+                    uploadBtn.textContent = 'Upload & Process';
                 }
             });
         }
@@ -417,7 +573,7 @@
                 ws = new WebSocket(WS_URL);
 
                 ws.onopen = () => {
-                    statusEl.textContent = '✅ Connected';
+                    statusEl.textContent = 'Connected';
                     statusEl.className = 'connection-status connected';
                     recordBtn.disabled = false;
                     addMessage('system', 'Connected to Realtime API');
@@ -430,7 +586,7 @@
 
                 ws.onerror = (error) => {
                     console.error('WebSocket error:', error);
-                    statusEl.textContent = '❌ Connection Error';
+                    statusEl.textContent = 'Connection Error';
                     statusEl.className = 'connection-status disconnected';
                 };
 
@@ -446,7 +602,7 @@
 
             } catch (error) {
                 console.error('Connection error:', error);
-                statusEl.textContent = '❌ Failed to Connect';
+                statusEl.textContent = 'Failed to Connect';
                 statusEl.className = 'connection-status disconnected';
             }
         }
@@ -573,7 +729,7 @@
                 audioChunks = [];
                 isRecording = true;
                 document.getElementById('recordBtn').classList.add('recording');
-                document.getElementById('recordBtn').textContent = '⏹️';
+                document.getElementById('recordBtn').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
 
                 processor.onaudioprocess = (e) => {
                     if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -611,14 +767,14 @@
                 alert('Error accessing microphone. Please check permissions.');
                 isRecording = false;
                 document.getElementById('recordBtn').classList.remove('recording');
-                document.getElementById('recordBtn').textContent = '🎤';
+                document.getElementById('recordBtn').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
             }
         }
 
         function stopRecording() {
             isRecording = false;
             document.getElementById('recordBtn').classList.remove('recording');
-            document.getElementById('recordBtn').textContent = '🎤';
+            document.getElementById('recordBtn').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
 
             if (window.audioProcessor) {
                 window.audioProcessor.disconnect();
